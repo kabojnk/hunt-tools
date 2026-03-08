@@ -32,7 +32,9 @@ function applyFilters(
       m.zone.toLowerCase().includes(q) ||
       m.region.toLowerCase().includes(q)
     );
-  }).slice(0, 14);
+  // When filters are active the result set is already narrow — show all of them.
+  // For unfiltered text search, cap at 14 to keep the dropdown manageable.
+  }).slice(0, rankFilters.size > 0 || expFilters.size > 0 || typeFilter !== null ? 200 : 14);
 }
 
 export function SearchBar({ onAdd, trackedIds }: Props) {
