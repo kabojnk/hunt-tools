@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SearchBar } from './components/SearchBar';
 import { HuntList } from './components/HuntList';
 import type { HuntMark } from './data/hunts';
+import { decodeShareHash, copyShareUrl } from './utils/share';
 import './App.css';
 
 const STORAGE_KEY = 'ff14-hunt-tracker-v2';
@@ -21,9 +22,27 @@ function loadState(): StoredState {
 }
 
 export default function App() {
-  const [tracked, setTracked]     = useState<HuntMark[]>(() => loadState().tracked);
-  const [completed, setCompleted] = useState<Set<string>>(() => new Set(loadState().completed));
+  const [tracked, setTracked]         = useState<HuntMark[]>(() => loadState().tracked);
+  const [completed, setCompleted]     = useState<Set<string>>(() => new Set(loadState().completed));
+  const [groupBy, setGroupBy]         = useState('zone');
+  const [toast, setToast]             = useState<string | null>(null);
+  const [sharedBanner, setSharedBanner] = useState(false);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Load from URL hash on mount
+  useEffect(() => {
+    const result = decodeShareHash(window.location.hash);
+    if (result && result.marks.length > 0) {
+      setTracked(result.marks);
+      setCompleted(new Set());
+      setGroupBy(result.groupBy);
+      setSharedBanner(true);
+      // Clean the hash from the URL without a page reload
+      history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  // Persist to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       tracked,
@@ -31,11 +50,18 @@ export default function App() {
     }));
   }, [tracked, completed]);
 
+  const showToast = (msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2500);
+  };
+
   const trackedIds = new Set(tracked.map((m) => m.id));
 
   const handleAdd = (mark: HuntMark) => {
     if (!trackedIds.has(mark.id)) {
       setTracked((prev) => [...prev, mark]);
+      setSharedBanner(false);
     }
   };
 
@@ -53,14 +79,23 @@ export default function App() {
   };
 
   const handleClearCompleted = () => {
-    const completedArr = Array.from(completed);
-    setTracked((prev) => prev.filter((m) => !completedArr.includes(m.id)));
+    const done = Array.from(completed);
+    setTracked((prev) => prev.filter((m) => !done.includes(m.id)));
     setCompleted(new Set());
   };
 
   const handleClearAll = () => {
     setTracked([]);
     setCompleted(new Set());
+  };
+
+  const handleShare = () => {
+    if (tracked.length === 0) {
+      showToast('Add some hunts first!');
+      return;
+    }
+    copyShareUrl(tracked, groupBy);
+    showToast('Share link copied to clipboard!');
   };
 
   return (
@@ -82,16 +117,32 @@ export default function App() {
       </header>
 
       <main className="app-main">
+        {sharedBanner && (
+          <div className="shared-banner">
+            <span>📋 Loaded a shared hunt list ({tracked.length} marks)</span>
+            <button className="shared-banner-dismiss" onClick={() => setSharedBanner(false)}>×</button>
+          </div>
+        )}
+
         <SearchBar onAdd={handleAdd} trackedIds={trackedIds} />
 
         <section className="list-section">
-          <h2 className="section-title">
-            Hunt List
-            {tracked.length > 0 && <span className="list-count">{tracked.length}</span>}
-          </h2>
+          <div className="list-section-header">
+            <h2 className="section-title">
+              Hunt List
+              {tracked.length > 0 && <span className="list-count">{tracked.length}</span>}
+            </h2>
+            {tracked.length > 0 && (
+              <button className="share-btn" onClick={handleShare} title="Copy share link">
+                <ShareIcon /> Share List
+              </button>
+            )}
+          </div>
           <HuntList
             marks={tracked}
             completedIds={completed}
+            groupBy={groupBy}
+            onGroupByChange={setGroupBy}
             onRemove={handleRemove}
             onComplete={handleComplete}
             onClearCompleted={handleClearCompleted}
@@ -99,6 +150,17 @@ export default function App() {
           />
         </section>
       </main>
+
+      {toast && <div className="toast">{toast}</div>}
     </div>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+    </svg>
   );
 }

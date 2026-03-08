@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { HuntMark, Expansion } from '../data/hunts';
 
 type GroupBy = 'zone' | 'expansion' | 'rank';
@@ -6,6 +5,8 @@ type GroupBy = 'zone' | 'expansion' | 'rank';
 interface Props {
   marks: HuntMark[];
   completedIds: Set<string>;
+  groupBy: string;
+  onGroupByChange: (g: string) => void;
   onRemove: (id: string) => void;
   onComplete: (id: string) => void;
   onClearCompleted: () => void;
@@ -49,8 +50,8 @@ function groupMarks(marks: HuntMark[], by: GroupBy): [string, HuntMark[]][] {
   return Array.from(map.entries());
 }
 
-export function HuntList({ marks, completedIds, onRemove, onComplete, onClearCompleted, onClearAll }: Props) {
-  const [groupBy, setGroupBy] = useState<GroupBy>('zone');
+export function HuntList({ marks, completedIds, groupBy, onGroupByChange, onRemove, onComplete, onClearCompleted, onClearAll }: Props) {
+  const setGroupBy = (g: GroupBy) => onGroupByChange(g);
 
   const doneCount    = marks.filter((m) => completedIds.has(m.id)).length;
   const sCount       = marks.filter((m) => m.rank === 'S' || m.rank === 'SS').length;
@@ -67,7 +68,8 @@ export function HuntList({ marks, completedIds, onRemove, onComplete, onClearCom
     );
   }
 
-  const groups = groupMarks(marks, groupBy);
+  const safeGroupBy: GroupBy = (['zone', 'expansion', 'rank'] as GroupBy[]).includes(groupBy as GroupBy) ? (groupBy as GroupBy) : 'zone';
+  const groups = groupMarks(marks, safeGroupBy);
 
   return (
     <div className="hunt-list">
